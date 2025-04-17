@@ -1,0 +1,70 @@
+version: "3.9"  # Version này được hỗ trợ rộng rãi và ổn định cho production.
+
+services:
+  # =========================
+  # 1. MongoDB Service
+  # =========================
+  mongodb:
+    image: mongo                 # Phiên bản MongoDB
+    container_name: mongo              # Tên container
+    ports:
+      - "27017:27017"                  # Map cổng ngoài -> trong
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    volumes:
+      - mongo_data:/data/db            # Gắn volume để lưu trữ data
+
+  # =========================
+  # 2. ASP.NET Core Backend API
+  # =========================
+  backend:
+    build:
+      context: ../calendaroflife_backend_aspdotnet_authservice  # Thư mục chứa mã nguồn backend
+      dockerfile: Dockerfile                                     # Dockerfile trong thư mục trên
+    container_name: authservice
+    expose:
+      - "5001"                    # expose (bên trong network nội bộ) chứ không public cổng
+    ports:
+      - "5000:5181"              # Public cổng 5000 cho người dùng bên ngoài
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDB__ConnectionString=mongodb://localhost:27017/calendar_of_life
+    depends_on:
+      - mongodb                 # Đảm bảo MongoDB chạy trước
+
+  # =========================
+  # 3. React Frontend
+  # =========================
+  frontend:
+    build:
+      context: ../calendaroflife_frontend_react  # Thư mục frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    expose:
+      - "3000"                # expose cổng dev server nội bộ (React)
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # Fix hot reload trong Docker
+    stdin_open: true
+    tty: true
+    depends_on:
+      - backend               # Chờ backend sẵn sàng
+
+  # =========================
+  # 4. NGINX Gateway
+  # =========================
+  nginx:
+    image: nginx:latest
+    container_name: nginx_gateway
+    ports:
+      - "80:80"               # Public gateway ngoài cho người dùng
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro  # Mount file config nginx
+    depends_on:
+      - frontend
+      - backend
+      - mongodb               # Có thể không cần thiết, thêm để đảm bảo thứ tự
+    restart: unless-stopped   # Gợi ý thêm để tránh restart không cần thiết
+
+volumes:
+  mongo_data:  # Volume được đặt tên dùng cho MongoDB
