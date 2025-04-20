@@ -12,8 +12,15 @@ services:
       MONGO_INITDB_ROOT_USERNAME: helu
       MONGO_INITDB_ROOT_PASSWORD: HeLu123
       MONGO_INITDB_DATABASE: Authenticator
+      # Mongo sẽ luôn tạo sãn 1 volume anonymous sử dụng cho việc lắng nghe config có đường dãn là /data/configdb
     volumes:
+      # Tạo volume mongo_data với tên là auth_mongo_data, đường dẫn là /data/db
       - mongo_data:/data/db
+      # Định danh volume config là mongo_config, đường dẫn là /data/configdb
+      - mongo_config:/data/configdb
+      # Cơ chế Bind Mount
+      # - ./database/database_auth_mongo:/data/db
+      # - ./database/database_auth_mongo_config:/data/configdb 
     networks:
       - app-network
 
@@ -45,6 +52,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - REACT_APP_API_CLIENT_URL=/api/
       - CHOKIDAR_USEPOLLING=true
     stdin_open: true
     tty: true
@@ -71,6 +79,9 @@ services:
 volumes:
   mongo_data:
     name: auth_mongo_data
+  mongo_config:
+    name: auth_mongo_config
 networks:
   app-network:
     driver: bridge
+    
