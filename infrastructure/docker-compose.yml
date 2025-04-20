@@ -1,70 +1,76 @@
-version: "3.9"  # Version này được hỗ trợ rộng rãi và ổn định cho production.
+version: "3.9"
 
 services:
-  # =========================
-  # 1. MongoDB Service
-  # =========================
-  mongodb:
-    image: mongo                 # Phiên bản MongoDB
-    container_name: mongo              # Tên container
+  # MongoDB Service
+  db_auth:
+    image: mongo  # Chỉ định phiên bản cụ thể
+    container_name: auth_database_mongo
+    restart: always
     ports:
-      - "27017:27017"                  # Map cổng ngoài -> trong
+      - "27018:27017"  # Map cổng host 27018 tới cổng container 27017
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: example
+      MONGO_INITDB_ROOT_USERNAME: helu
+      MONGO_INITDB_ROOT_PASSWORD: HeLu123
+      MONGO_INITDB_DATABASE: Authenticator
     volumes:
-      - mongo_data:/data/db            # Gắn volume để lưu trữ data
+      - mongo_data:/data/db
+    networks:
+      - app-network
 
-  # =========================
-  # 2. ASP.NET Core Backend API
-  # =========================
-  backend:
+  # ASP.NET Core Backend API
+  backend_auth:
+    # build khi đang chạy local, về sau sẽ triển khai lấy từ image trên docker hub
     build:
-      context: ../calendaroflife_backend_aspdotnet_authservice  # Thư mục chứa mã nguồn backend
-      dockerfile: Dockerfile                                     # Dockerfile trong thư mục trên
-    container_name: authservice
-    expose:
-      - "5001"                    # expose (bên trong network nội bộ) chứ không public cổng
+      context: ../calendaroflife_backend_aspdotnet_authservice
+      dockerfile: Dockerfile
+    container_name: auth_service_dotnet
     ports:
-      - "5000:5181"              # Public cổng 5000 cho người dùng bên ngoài
+      - "8080:8080"  # Map cổng host 8080 tới cổng container 8080
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - MongoDB__ConnectionString=mongodb://localhost:27017/calendar_of_life
+      - MongoDB__ConnectionString=mongodb://helu:HeLu123@db_auth:27017
+      - MongoDB__Database=Authenticator
     depends_on:
-      - mongodb                 # Đảm bảo MongoDB chạy trước
+      - db_auth
+    networks:
+      - app-network
 
-  # =========================
-  # 3. React Frontend
-  # =========================
-  frontend:
+  # React Frontend
+  frontend_web:
+    # build khi đang chạy local, về sau sẽ triển khai lấy từ image trên docker hub
     build:
-      context: ../calendaroflife_frontend_react  # Thư mục frontend
+      context: ../calendaroflife_frontend_react
       dockerfile: Dockerfile
-    container_name: frontend
-    expose:
-      - "3000"                # expose cổng dev server nội bộ (React)
+    container_name: frontend_web_react
+    ports:
+      - "3000:3000"
     environment:
-      - CHOKIDAR_USEPOLLING=true  # Fix hot reload trong Docker
+      - CHOKIDAR_USEPOLLING=true
     stdin_open: true
     tty: true
     depends_on:
-      - backend               # Chờ backend sẵn sàng
+      - backend_auth
+    networks:
+      - app-network
 
-  # =========================
-  # 4. NGINX Gateway
-  # =========================
+  # NGINX Gateway
   nginx:
     image: nginx:latest
     container_name: nginx_gateway
     ports:
-      - "80:80"               # Public gateway ngoài cho người dùng
+      - "100:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro  # Mount file config nginx
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - frontend
-      - backend
-      - mongodb               # Có thể không cần thiết, thêm để đảm bảo thứ tự
-    restart: unless-stopped   # Gợi ý thêm để tránh restart không cần thiết
+      - frontend_web
+      - backend_auth
+    restart: unless-stopped
+    networks:
+      - app-network
 
 volumes:
-  mongo_data:  # Volume được đặt tên dùng cho MongoDB
+  mongo_data:
+    name: auth_mongo_data
+networks:
+  app-network:
+    driver: bridge
